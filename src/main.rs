@@ -1,91 +1,67 @@
-use std::{fmt::Display, collections::VecDeque};
+use std::str::FromStr;
+use sscanf::sscanf;
+use aoc2018::input_lines;
+use aoc2018::Matrix;
 
-struct Game {
-    // The board
-    board: Vec<usize>,
-    // Index of the current marble
-    current: isize,
+#[derive(Debug,PartialEq,Eq,Ord,PartialOrd)]
+struct Point {
+    x: i64,
+    y: i64,
+    vx: i64,
+    vy: i64,
 }
 
-impl Game {
-    fn new() -> Game {
-        Game {
-            board: vec![0],
-            current: 0,
-        }
-    }
+impl FromStr for Point {
+    type Err = sscanf::Error;
 
-    fn turn(&mut self, marble: usize) -> usize {
-        if marble % 23 != 0 {
-            // Normal case
-            let position = self.current + 2;
-            self.current = self.insert(position, marble);
-            0
-        } else {
-            const SHIFT: isize = -7;
-            let take = self.normalize_index(self.current + SHIFT) as isize;
-            let score = marble + self.remove(take);
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let s: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+        let parts = sscanf!(s, "position=<{i64},{i64}>velocity=<{i64},{i64}>")?;
+        Ok(Point {
+            x: parts.0,
+            y: parts.1,
+            vx: parts.2,
+            vy: parts.3,
+        })
+    }}
 
-            if take == self.board.len() as isize {
-                self.current = 0;
-            } else {
-                self.current = self.normalize_index(take) as isize;
-            }
-            score
-        }
+fn draw(points: &[Point], xmin: i64, xmax: i64, ymin: i64, ymax: i64) {
+    let width = (xmax-xmin) as usize + 1;
+    let height = (ymax-ymin) as usize + 1;
+    let mut drawing = Matrix::new_default(width, height, false);
+    for p in points {
+        drawing[((p.x-xmin) as isize, (p.y - ymin) as isize)] = true;
     }
-
-    fn normalize_index(&self, index: isize) -> usize {
-        if index < 0 {
-            self.normalize_index(self.board.len() as isize + index)
-        } else if index as usize >= self.board.len() {
-            index as usize % self.board.len()
-        } else {
-            index as usize
-        }
-    }
-
-    fn insert(&mut self, index: isize, marble: usize) -> isize {
-        let mut index = self.normalize_index(index);
-        if index == 0 {
-            index = self.board.len();
-        }
-        self.board.insert(index, marble);
-        index as isize
-    }
-
-    fn remove(&mut self, index: isize) -> usize {
-        let index = self.normalize_index(index);
-        self.board.remove(index)
-    }
-}
-
-impl Display for Game {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.board.iter().find(|x| **x == 0);
-        for (pos, marble) in self.board.iter().enumerate() {
-            if pos == self.current as usize {
-                write!(f, "({}) ", marble)
-            } else {
-                write!(f, " {}  ", marble)
-            }?;
-        }
-        Ok(())
-    }
+    println!("---");
+    drawing.draw();
+    println!("---");
 }
 
 fn main() {
-    const players: usize = 429;
-    const last_marble: usize = 70901;
+    let mut points = input_lines::<Point>();
 
-    let mut scores = [0; players as usize];
-
-    let mut game = Game::new();
-    for marble in 0..last_marble {
-        let player = marble % players;
-        scores[player] += game.turn(marble + 1);
-        // println!("[{}]\t{}", player + 1, game);
+    println!("{} points loaded.", points.len());
+    let mut prev_area: i64  = i64::MAX;
+    let mut time = 0;
+    loop {
+        for p in points.iter_mut() {
+            p.x += p.vx;
+            p.y += p.vy;
+        }
+        let xmin = points.iter().map(|p| p.x).min().unwrap();
+        let ymin = points.iter().map(|p| p.y).min().unwrap();
+        let xmax = points.iter().map(|p| p.x).max().unwrap();
+        let ymax = points.iter().map(|p| p.y).max().unwrap();
+        let area = (xmax - xmin)*(ymax - ymin);
+        if area > prev_area {
+            println!("After {} seconds", time);
+            break;
+        } else {
+            time += 1;
+            prev_area = area;
+            if area < 1000 {
+                draw(&points, xmin, xmax, ymin, ymax);
+            }
+        }
     }
-
-    println!("High score: {}", scores.iter().max().unwrap());
-}
+    }

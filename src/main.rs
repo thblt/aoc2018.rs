@@ -1,38 +1,39 @@
-use std::mem::transmute;
-
+use std::ops::Deref;
 use aoc2018::*;
 
-fn read_node(raw: &[u32], mut index: usize, meta_mode: bool) -> (u32, usize) {
-    let children_count = raw[index];
-    let meta_count = raw[index+1];
-    index += 2;
+// Meta mode is for part 1: just accumulate metadata.
+fn read_node<T>(raw: &mut T, meta_mode: bool) -> u32
+where
+    T: Iterator,
+ <T as Iterator>::Item: Deref<Target = u32>
+{
+    let children_count = raw.next().unwrap();
+    let meta_count = raw.next().unwrap();
 
-    let children_mode = !meta_mode && children_count > 0;
-    let mut child_values = vec!();
+    let children_mode = !meta_mode && *children_count > 0;
+    let mut child_values = vec![];
     let mut result = 0;
 
-    for _ in 0..children_count {
-        let x;
-        (x, index) = read_node(&raw, index, meta_mode);
-        child_values.push(x);
-        if meta_mode { // For part 1
-            result += x;
+    for _ in 0..*children_count {
+        if meta_mode {
+            result += read_node(raw, meta_mode);
+        } else {
+            child_values.push(read_node(raw, meta_mode));
         }
     }
 
-    for _ in 0..meta_count {
-        let meta = raw[index];
-        index += 1;
+    for _ in 0..*meta_count {
+        let meta = raw.next().unwrap();
         if children_mode {
-            let meta = meta as usize;
+            let meta = *meta as usize;
             if meta <= child_values.len() {
                 result += child_values[meta - 1];
             }
         } else {
-            result += meta;
+            result += *meta;
         }
     }
-    (result, index)
+    result
 }
 
 fn main() {
@@ -40,8 +41,6 @@ fn main() {
         .split(" ")
         .map(|x| str::parse::<u32>(x).unwrap())
         .collect::<Vec<u32>>();
-    let (result1, _) = read_node(&data, 0, true);
-    let (result2, _) = read_node(&data, 0, false);
-    println!("Part 1: {}", result1);
-    println!("Part 2: {}", result2);
+    println!("Part 1: {}", read_node(&mut data.iter(), true));
+    println!("Part 2: {}", read_node(&mut data.iter(), false));
 }

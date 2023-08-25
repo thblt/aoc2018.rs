@@ -1,46 +1,91 @@
-use std::ops::Deref;
-use aoc2018::*;
+use std::{fmt::Display, collections::VecDeque};
 
-// Meta mode is for part 1: just accumulate metadata.
-fn read_node<T>(raw: &mut T, meta_mode: bool) -> u32
-where
-    T: Iterator,
- <T as Iterator>::Item: Deref<Target = u32>
-{
-    let children_count = raw.next().unwrap();
-    let meta_count = raw.next().unwrap();
+struct Game {
+    // The board
+    board: Vec<usize>,
+    // Index of the current marble
+    current: isize,
+}
 
-    let children_mode = !meta_mode && *children_count > 0;
-    let mut child_values = vec![];
-    let mut result = 0;
-
-    for _ in 0..*children_count {
-        if meta_mode {
-            result += read_node(raw, meta_mode);
-        } else {
-            child_values.push(read_node(raw, meta_mode));
+impl Game {
+    fn new() -> Game {
+        Game {
+            board: vec![0],
+            current: 0,
         }
     }
 
-    for _ in 0..*meta_count {
-        let meta = raw.next().unwrap();
-        if children_mode {
-            let meta = *meta as usize;
-            if meta <= child_values.len() {
-                result += child_values[meta - 1];
+    fn turn(&mut self, marble: usize) -> usize {
+        if marble % 23 != 0 {
+            // Normal case
+            let position = self.current + 2;
+            self.current = self.insert(position, marble);
+            0
+        } else {
+            const SHIFT: isize = -7;
+            let take = self.normalize_index(self.current + SHIFT) as isize;
+            let score = marble + self.remove(take);
+
+            if take == self.board.len() as isize {
+                self.current = 0;
+            } else {
+                self.current = self.normalize_index(take) as isize;
             }
-        } else {
-            result += *meta;
+            score
         }
     }
-    result
+
+    fn normalize_index(&self, index: isize) -> usize {
+        if index < 0 {
+            self.normalize_index(self.board.len() as isize + index)
+        } else if index as usize >= self.board.len() {
+            index as usize % self.board.len()
+        } else {
+            index as usize
+        }
+    }
+
+    fn insert(&mut self, index: isize, marble: usize) -> isize {
+        let mut index = self.normalize_index(index);
+        if index == 0 {
+            index = self.board.len();
+        }
+        self.board.insert(index, marble);
+        index as isize
+    }
+
+    fn remove(&mut self, index: isize) -> usize {
+        let index = self.normalize_index(index);
+        self.board.remove(index)
+    }
+}
+
+impl Display for Game {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.board.iter().find(|x| **x == 0);
+        for (pos, marble) in self.board.iter().enumerate() {
+            if pos == self.current as usize {
+                write!(f, "({}) ", marble)
+            } else {
+                write!(f, " {}  ", marble)
+            }?;
+        }
+        Ok(())
+    }
 }
 
 fn main() {
-    let data = input_lines::<String>()[0]
-        .split(" ")
-        .map(|x| str::parse::<u32>(x).unwrap())
-        .collect::<Vec<u32>>();
-    println!("Part 1: {}", read_node(&mut data.iter(), true));
-    println!("Part 2: {}", read_node(&mut data.iter(), false));
+    const players: usize = 429;
+    const last_marble: usize = 70901;
+
+    let mut scores = [0; players as usize];
+
+    let mut game = Game::new();
+    for marble in 0..last_marble {
+        let player = marble % players;
+        scores[player] += game.turn(marble + 1);
+        // println!("[{}]\t{}", player + 1, game);
+    }
+
+    println!("High score: {}", scores.iter().max().unwrap());
 }

@@ -1,128 +1,132 @@
-const SN: i128 = 3031;
+use aoc2018::input_lines;
 
-#[inline]
-fn power_level(x: i128, y: i128, sn: i128) -> i128 {
-    let rack = x + 10;
-    let mut power = rack * y;
-    power += sn;
-    power *= rack;
-    power /= 100;
-    power %= 10;
-    power -= 5;
-    power
-}
+// I did part 2 by hand, so there's no clean code here.  The trick is
+// that at some point, the plant pattern remains identical and simply
+// shifts to the right, one step at each generation.  Given we've
+// found this pattern at generation g , with s the sum of plant
+// positions (like the result of part 1), pots containing plants, and
+// n the number of plant-containing pots, then the solution to part
+// two is:
+//
+// s + ((50000000000-g)*n)
+//
+// Simply put: the current solution, plus the number of remaining
+// generations multiplied by the number of plants (right shifting by 1
+// means the solution increases by 1 for each plant)
 
-fn test() {
-    let mut sum: [[usize; 301]; 301] = [[0; 301]; 301];
+const POTS: usize = 10000;
+const SHIFT: isize = 5000;
 
-    for y in 1..=20 {
-        for x in 1..=20 {
-
-            sum[y][x] = 1
-                + sum[y - 1][x]
-                + sum[y][x - 1]
-                - sum[y - 1][x - 1];
-        }
-    }
-
-    for y in 1..=20 {
-        for x in 1..=20 {
-            print!("{:3} ", sum[y][x]);
-            assert!(sum[y][x] == x*y);
-        }
-        println!();
-    }
-}
-
-fn part2() {
-    // This is ported from c++ code by Reddit user tribulu at
-    // https://www.reddit.com/r/adventofcode/comments/a53r6i/2018_day_11_solutions/ebjogd7/
-
-    // Explaining this to myself: what we're doing here is a partial
-    // sum table, or summed area table.  Instead of storing the power
-    // level of each cell, each (x,y) cell holds the *total power
-    // level* of the area ranging from (1,1) to (x,y).
-    //
-    // See also https://en.wikipedia.org/wiki/Summed-area_table
-    let mut sum: [[i128; 301]; 301] = [[0; 301]; 301];
-
-    // Creating the table.
-    for y in 1..=300 {
-        for x in 1..=300 {
-            sum[y][x] = power_level(x as i128, y as i128, SN)
-                + sum[y - 1][x]
-                + sum[y][x - 1]
-            // Substract here to avoid counting twice!
-                - sum[y - 1][x - 1];
-        }
-    }
-
-    let mut bx: usize = usize::MIN;
-    let mut by: usize = usize::MIN;
-    let mut bs: usize = usize::MIN;
-    let mut best: i128 = i128::MIN;
-    let mut bx3: usize = usize::MIN;
-    let mut by3: usize = usize::MIN;
-    let mut best3: i128 = i128::MIN;
-    for s in 1..=300 {
-        for y in s..=300 {
-            for x in s..=300 {
-                let total = sum[y][x] - sum[y - s][x] - sum[y][x - s] + sum[y - s][x - s];
-                if total > best {
-                    best = total;
-                    bx = x;
-                    by = y;
-                    bs = s;
-                }
-                if s == 3 && total > best3 {
-                    best3 = total;
-                    bx3 = x;
-                    by3 = y;
-                }
-            }
-        }
-    }
-    println!(
-        "Part 1: Best is ({},{}) with {} power",
-        bx3 - 2,
-        by3 - 2,
-        best3
-    );
-    println!(
-        "Part 2: Best is ({},{},{}) with {} power",
-        bx - bs + 1,
-        by - bs + 1,
-        bs,
-        best
-    );
-}
-
-fn part1() {
-    // This is my code
-    let mut best = i128::MIN;
-    let mut best_coords = (0, 0);
-    for x in 1..=298 {
-        for y in 1..=298 {
-            let mut power = 0;
-            for dx in 0..3 {
-                for dy in 0..3 {
-                    power += power_level(x + dx, y + dy, SN);
-                }
-            }
-            if power > best {
-                best = power;
-                best_coords = (x, y);
-            }
-        }
-    }
-    println!(
-        "Part 1 (naive version): Best is at ({},{}) with {} power.",
-        best_coords.0, best_coords.1, best
-    );
-}
+// Notes
+// Since a note is just a five-bits number, we encode it as a number.
+type Plants = Vec<bool>;
+type Notes = [bool; 2 << 4];
 
 fn main() {
-    part1();
-    part2();
-    test();
+    let (mut plants, notes) = read_input();
+
+    print!(" 0: ");
+    print_plants(&plants);
+    for x in 1..=200 {
+        step(&mut plants, &notes);
+        print!("{:2}: ", x);
+        print_plants(&plants);
+    }
+
+    let extra_gens: u128 = 50000000000-200;
+    // let extra_gens: u128 = 200-100;
+    let result = 16866 + extra_gens*80;
+    // let result = 8866 + extra_gens*80;
+    println!("{}", result)
+
+}
+
+fn print_plants(plants: &Plants) {
+    let mut buffer: String = String::new();
+    let mut started = false;
+    let mut first = true;
+    let mut count = 0;
+    let mut result = 0;
+    for (n, plant) in plants.iter().enumerate() {
+        started |= plant;
+        if !started {
+            continue;
+        } else {
+            if first {
+                print!(" {} ", n as isize - SHIFT);
+                first = false;
+            }
+
+            if *plant {
+                result += n as isize - SHIFT;
+                count += 1;
+                print!("{}#", buffer);
+                buffer = String::new();
+            } else {
+                buffer += ".";
+            }
+        }
+
+    }
+    println!(" ({} pots, pos total: {})", count, result);
+}
+
+fn step(plants: &mut Plants, notes: &Notes) {
+    let old = plants.clone();
+    for p in 2..old.len() - 3 {
+        let rule = read_number(&old[p - 2..p + 3]);
+        plants[p] = notes[rule];
+    }
+}
+
+fn read_input() -> (Plants, Notes) {
+    let mut plants = [false; POTS].to_vec();
+    let mut notes: Notes = [false; 2 << 4];
+    let input = input_lines::<String>();
+    input[0]
+        .split_once(": ")
+        .unwrap()
+        .1
+        .chars()
+        .map(|c| c.as_bool())
+        .enumerate()
+        .for_each(|(n, p)| plants[n + (SHIFT as usize)] = p);
+    for (cond, effect) in input.iter().skip(2).map(|s| s.split_once(" => ").unwrap()) {
+        notes[read_number(&cond.chars().collect::<Vec<char>>())] =
+            effect.chars().nth(0).unwrap().as_bool();
+    }
+    (plants, notes)
+}
+
+fn read_number<T: Boolish>(n: &[T]) -> usize {
+    // println!("Reading {} bits", n.len());
+    let mut x = 1;
+    let mut ret = 0;
+    for d in n {
+        if d.as_bool() {
+            ret += x;
+        }
+        x *= 2;
+    }
+    ret
+}
+
+trait Boolish {
+    fn as_bool(self: &Self) -> bool;
+}
+
+impl Boolish for char {
+    fn as_bool(self: &Self) -> bool {
+        match self {
+            '#' => true,
+            '.' => false,
+            _ => panic!("Bad char {}", self),
+        }
+    }
+}
+
+impl Boolish for bool {
+    fn as_bool(self: &Self) -> bool {
+        *self
+    }
 }
